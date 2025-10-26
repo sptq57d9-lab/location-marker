@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Location Marker - 位置記録テキスト出力</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+    body {
+        font-family: 'Segoe UI', Arial, sans-serif;
+        background-color: #f4f6f8;
+        line-height: 1.6;
+    }
+
+    .container {
+        display: flex;
+        height: 100vh;
+        flex-direction: row;
+    }
+
+    .left-panel {
+        width: 100%;
+        max-width: 420px;
+        background: white;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 4px 0 12px rgba(0, 0, 0, 0.1);
+        z-index: 1000;
+        transition: transform 0.3s ease;
+    }
+
+    @media (max-width: 768px) {
+        .left-panel {
+            position: absolute;
+            transform: translateX(-100%);
+        }
+        .left-panel.active {
+            transform: translateX(0);
+        }
+        .toggle-panel {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1001;
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 8px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+    }
+
+    .header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 20px;
+        text-align: center;
+    }
+
+    .header h1 {
+        font-size: 1.5rem;
+        margin-bottom: 0.25rem;
+    }
+
+    .header p {
+        font-size: 0.875rem;
+        opacity: 0.9;
+    }
+
+    .controls {
+        padding: 1rem;
+        border-bottom: 1px solid #eee;
+        max-height: 50%;
+        overflow-y: auto;
+    }
+
+    .button-group {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        margin-bottom: 1rem;
+    }
+
+    button {
+        flex: 1;
+        min-width: 85px;
+        padding: 0.75rem;
+        font-size: 0.875rem;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 600;
+        transition: background-color 0.2s, transform 0.1s;
+    }
+
+    button:hover:not(:disabled) {
+        transform: translateY(-1px);
+    }
+
+    .btn-primary {
+        background-color: #667eea;
+        color: white;
+    }
+
+    .btn-primary:hover {
+        background-color: #5568d3;
+    }
+
+    .btn-primary:disabled {
+        background-color: #ccc;
+        cursor: not-allowed;
+    }
+
+    .btn-danger {
+        background-color: #f44336;
+        color: white;
+    }
+
+    .btn-danger:hover {
+        background-color: #da190b;
+    }
+
+    .btn-success {
+        background-color: #4caf50;
+        color: white;
+    }
+
+    .btn-success:hover {
+        background-color: #45a049;
+    }
+
+    .input-group {
+        margin-bottom: 0.75rem;
+    }
+
+    .input-group label {
+        display: block;
+        font-size: 0.75rem;
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+        color: #333;
+    }
+
+    input[type="text"],
+    textarea {
+        width: 100%;
+        padding: 0.5rem;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 0.875rem;
+        font-family: inherit;
+        transition: border-color 0.2s;
+    }
+
+    input:focus,
+    textarea:focus {
+        outline: none;
+        border-color: #667eea;
+    }
+
+    textarea {
+        resize: vertical;
+        min-height: 60px;
+    }
+
+    .current-location {
+        background-color: #f0f7ff;
+        padding: 0.5rem;
+        border-radius: 6px;
+        font-size: 0.75rem;
+        margin-bottom: 0.75rem;
+        border: 1px solid #ddd;
+    }
+
+    .location-value {
+        font-family: monospace;
+        color: #667eea;
+        font-weight: 600;
+        word-break: break-all;
+    }
+
+    .records-section {
+        flex: 1;
+        overflow-y: auto;
+        padding: 1rem;
+        border-top: 2px solid #667eea;
+    }
+
+    .records-title {
+        font-weight: 600;
+        font-size: 0.875rem;
+        margin-bottom: 0.5rem;
+        color: #333;
+    }
+
+    .record-item {
+        background-color: #f9f9f9;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        padding: 0.5rem;
+        margin-bottom: 0.5rem;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .record-item:hover {
+        background-color: #f0f7ff;
+        border-color: #667eea;
+    }
+
+    .record-name {
+        font-weight: 600;
+        font-size: 0.875rem;
+        color: #333;
+        margin-bottom: 0.25rem;
+    }
+
+    .record-coords,
+    .record-time,
+    .record-memo {
+        font-size: 0.75rem;
+        color: #666;
+    }
+
+    .record-memo {
+        margin-top: 0.25rem;
+        font-style: italic;
+    }
+
+    .record-time {
+        color: #999;
+        margin-top: 0.25rem;
+    }
+
+    .record-delete {
+        font-size: 0.75rem;
+        color: #f44336;
+        cursor: pointer;
+        margin-top: 0.5rem;
+        text-decoration: underline;
+        display: inline-block;
+    }
+
+    .empty-state {
+        text-align: center;
+        color: #999;
+        padding: 1.5rem;
+        font-size: 0.875rem;
+    }
+
+    #map {
+        flex: 1;
+    }
+
+    .text-output {
+        background-color: #f5f5f5;
+        padding: 0.75rem;
+        border-radius: 6px;
+        margin-top: 0.75rem;
+    }
+
+    .output-title {
+        font-size: 0.875rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        color: #333;
+    }
+
+    textarea.output-text {
+        background-color: white;
+        width: 100%;
+        height: 100px;
+        padding: 0.5rem;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-family: 'Courier New', monospace;
+        font-size: 0.75rem;
+        resize: vertical;
+    }
+
+    .export-buttons {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+    }
+
+    .export-buttons button {
+        flex: 1;
+        padding: 0.5rem;
+        font-size: 0.75rem;
+    }
+
+    .status {
+        padding: 0.75rem;
+        text-align: center;
+        font-size: 0.875rem;
+        border-radius: 6px;
+        margin-bottom: 0.75rem;
+        transition: all 0.3s;
+    }
+
+    .status.info {
+        background-color: #e3f2fd;
+        color: #1565c0;
+    }
+
+    .status.success {
+        background-color: #e8f5e9;
+        color: #2e7d32;
+    }
+
+    .status.error {
+        background-color: #ffebee;
+        color: #c62828;
+    }
+
+    .leaflet-popup-content {
+        font-size: 0.875rem;
+    }
+</style></head>
+<body>
+    <div class="container">
+        <!-- 左パネル -->
+        <div class="left-panel" id="leftPanel">
+            <div class="header">
+                <h1> 位置マーカー</h1>
+                <p>位置をテキスト記録</p>
+            </div>
+            
+        <div class="controls">
+            <div class="status info" id="status">準備完了</div>
+            
+            <div class="button-group">
+                <button class="btn-primary" id="getLocationBtn" onclick="app.getCurrentLocation()"> 現在地取得</button>
+                <button class="btn-success" onclick="app.markLocation()"> ここをマーク</button>
+            </div>
+            
+            <div class="current-location">
+                <div style="font-size: 0.75rem; color: #666; margin-bottom: 0.25rem;">現在位置:</div>
+                <div class="location-value">
+                    緯度: <span id="currentLat">-</span><br/>
+                    経度: <span id="currentLng">-</span>
+                </div>
+            </div>
+            
+            <div class="input-group">
+                <label> マーク名（オプション）</label>
+                <input type="text" id="markerName" placeholder="例：駐車位置、友達の家">
+            </div>
+            
+            <div class="input-group">
+                <label> メモ（オプション）</label>
+                <textarea id="markerMemo" placeholder="例：3階南側、ステッカー付き"></textarea>
+            </div>
+            
+            <button class="btn-primary" style="width: 100%;" onclick="app.addMarker()"> マーカーを追加</button>
+            
+            <div class="text-output">
+                <div class="output-title"> テキスト出力</div>
+                <textarea class="output-text" id="textOutput" readonly placeholder="マーカーの情報がここに表示されます"></textarea>
+                <div class="export-buttons">
+                    <button class="btn-primary" onclick="app.copyText()"> コピー</button>
+                    <button class="btn-primary" onclick="app.downloadText()"> TXT</button>
+                    <button class="btn-primary" onclick="app.downloadCsv()"> CSV</button>
+                    <button class="btn-danger" onclick="app.clearAll()"> 削除</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="records-section">
+            <div class="records-title"> 記録済みマーカー</div>
+            <div id="recordsList" class="empty-state">マーカーが登録されていません</div>
+        </div>
+    </div>
+    
+    <!-- 地図 -->
+    <div id="map"></div>
+</div>
+
+<script>
+    class LocationMarker {
+        constructor() {
+            this.map = null;
+            this.currentLat = null;
+            this.currentLng = null;
+            this.markers = [];
+            this.mapMarkers = [];
+            
+            this.elements = {
+                getLocationBtn: document.getElementById('getLocationBtn'),
+                markerName: document.getElementById('markerName'),
+                markerMemo: document.getElementById('markerMemo'),
+                textOutput: document.getElementById('textOutput'),
+                recordsList: document.getElementById('recordsList'),
+                status: document.getElementById('status'),
+                currentLat: document.getElementById('currentLat'),
+                currentLng: document.getElementById('currentLng')
+            };
+            
+            this.init();
+        }
+
+        init() {
+            this.initMap();
+            this.updateStatus('準備完了', 'info');
+        }
+
+        initMap() {
+            try {
+                this.map = L.map('map').setView([35.6762, 139.6503], 13);
+                
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors',
+                    maxZoom: 19
+                }).addTo(this.map);
+            } catch (error) {
+                this.updateStatus('地図の初期化に失敗しました', 'error');
+                console.error('Map init error:', error);
+            }
+        }
+
+        getCurrentLocation() {
+            this.updateStatus('位置情報を取得中...', 'info');
+            this.elements.getLocationBtn.disabled = true;
+            
+            if (!navigator.geolocation) {
+                this.updateStatus('このブラウザは位置情報に対応していません', 'error');
+                this.elements.getLocationBtn.disabled = false;
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    this.currentLat = position.coords.latitude;
+                    this.currentLng = position.coords.longitude;
+                    
+                    this.elements.currentLat.textContent = this.currentLat.toFixed(6);
+                    this.elements.currentLng.textContent = this.currentLng.toFixed(6);
+                    
+                    if (this.map) {
+                        this.map.setView([this.currentLat, this.currentLng], 16);
+                    }
+                    
+                    this.updateStatus('位置情報を取得しました ✓', 'success');
+                    this.elements.getLocationBtn.disabled = false;
+                },
+                (error) => {
+                    let message = '位置情報の取得に失敗しました';
+                    switch(error.code) {
+                        case error.PERMISSION_DENIED:
+                            message = '位置情報へのアクセスが許可されていません';
+                            break;
+                        case error.POSITION_UNAVAILABLE:
+                            message = '位置情報が利用できません';
+                            break;
+                        case error.TIMEOUT:
+                            message = '位置情報の取得がタイムアウトしました';
+                            break;
+                    }
+                    this.updateStatus(message, 'error');
+                    this.elements.getLocationBtn.disabled = false;
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
+        }
+
+        markLocation() {
+            this.elements.markerName.value = '';
+            this.elements.markerMemo.value = '';
+            this.addMarker();
+        }
+
+        addMarker() {
+            if (this.currentLat === null || this.currentLng === null) {
+                this.updateStatus('先に現在地を取得してください', 'error');
+                return;
+            }
+
+            const name = this.sanitizeInput(this.elements.markerName.value) || `マーカー${this.markers.length + 1}`;
+            const memo = this.sanitizeInput(this.elements.markerMemo.value);
+            const timestamp = new Date().toLocaleString('ja-JP');
+
+            const marker = {
+                id: Date.now(),
+                name: name,
+                lat: this.currentLat,
+                lng: this.currentLng,
+                memo: memo,
+                timestamp: timestamp
+            };
+
+            this.markers.push(marker);
+            
+            if (this.map) {
+                const mapMarker = L.marker([marker.lat, marker.lng], { draggable: true })
+                    .addTo(this.map)
+                    .bindPopup(`<b>${marker.name}</b><br/>${marker.lat.toFixed(6)}, ${marker.lng.toFixed(6)}<br/>${marker.memo || ''}`)
+                    .on('click', () => this.map.setView([marker.lat, marker.lng], 16))
+                    .on('dragend', (e) => {
+                        const newPos = e.target.getLatLng();
+                        marker.lat = newPos.lat;
+                        marker.lng = newPos.lng;
+                        this.updateRecordsList();
+                        this.updateTextOutput();
+                    });
+                this.mapMarkers.push(mapMarker);
+            }
+
+            this.elements.markerName.value = '';
+            this.elements.markerMemo.value = '';
+            this.updateRecordsList();
+            this.updateTextOutput();
+            this.updateStatus('マーカーを追加しました ✓', 'success');
+        }
+
+        deleteMarker(id) {
+            const index = this.markers.findIndex(m => m.id === id);
+            if (index !== -1) {
+                if (this.map && this.mapMarkers[index]) {
+                    this.map.removeLayer(this.mapMarkers[index]);
+                }
+                this.markers.splice(index, 1);
+                this.mapMarkers.splice(index, 1);
+                this.updateRecordsList();
+                this.updateTextOutput();
+                this.updateStatus('マーカーを削除しました', 'success');
+            }
+        }
+
+        updateRecordsList() {
+            const list = this.elements.recordsList;
+            list.innerHTML = '';
+            
+            if (this.markers.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'empty-state';
+                empty.textContent = 'マーカーが登録されていません';
+                list.appendChild(empty);
+                return;
+            }
+
+            this.markers.forEach((m) => {
+                const item = document.createElement('div');
+                item.className = 'record-item';
+                
+                let html = `
+                    <div class="record-name"> ${m.name}</div>
+                    <div class="record-coords">${m.lat.toFixed(6)}, ${m.lng.toFixed(6)}</div>
+                    <div class="record-time">${m.timestamp}</div>
+                `;
+                
+                if (m.memo) {
+                    html += `<div class="record-memo"> ${m.memo}</div>`;
+                }
+                
+                html += `<div class="record-delete" role="button" tabindex="0">削除</div>`;
+                
+                item.innerHTML = html;
+                
+                const deleteBtn = item.querySelector('.record-delete');
+                deleteBtn.addEventListener('click', () => this.deleteMarker(m.id));
+                deleteBtn.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') this.deleteMarker(m.id);
+                });
+                
+                item.addEventListener('click', () => {
+                    if (this.map) this.map.setView([m.lat, m.lng], 16);
+                });
+                
+                list.appendChild(item);
+            });
+        }
+
+        updateTextOutput() {
+            let text = '=== 位置マーカー記録 ===\n';
+            text += `出力日時: ${new Date().toLocaleString('ja-JP')}\n`;
+            text += '================================\n\n';
+
+            this.markers.forEach((m, index) => {
+                text += `【${index + 1}】 ${m.name}\n`;
+                text += `日時: ${m.timestamp}\n`;
+                text += `緯度: ${m.lat.toFixed(6)}\n`;
+                text += `経度: ${m.lng.toFixed(6)}\n`;
+                text += `座標: ${m.lat.toFixed(6)}, ${m.lng.toFixed(6)}\n`;
+                if (m.memo) text += `メモ: ${m.memo}\n`;
+                text += `Google Maps: https://maps.google.com/?q=${m.lat},${m.lng}\n`;
+                text += '\n';
+            });
+
+            this.elements.textOutput.value = text;
+        }
+
+        copyText() {
+            try {
+                this.elements.textOutput.select();
+                document.execCommand('copy');
+                this.updateStatus('テキストをコピーしました ✓', 'success');
+            } catch (err) {
+                this.updateStatus('コピーに失敗しました', 'error');
+            }
+        }
+
+        downloadText() {
+            try {
+                const text = this.elements.textOutput.value;
+                const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `location_markers_${Date.now()}.txt`;
+                a.click();
+                URL.revokeObjectURL(url);
+                this.updateStatus('テキストファイルをダウンロードしました ✓', 'success');
+            } catch (err) {
+                this.updateStatus('ダウンロードに失敗しました', 'error');
+            }
+        }
+
+        downloadCsv() {
+            try {
+                let csv = 'ID,Name,Latitude,Longitude,Timestamp,Memo\n';
+                this.markers.forEach((m) => {
+                    const row = [
+                        m.id,
+                        `"${m.name.replace(/"/g, '""')}"`,
+                        m.lat.toFixed(6),
+                        m.lng.toFixed(6),
+                        `"${m.timestamp}"`,
+                        `"${(m.memo || '').replace(/"/g, '')}"`
+                    ].join(',');
+                    csv += `${row}\n`;
+                });
+
+                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `location_markers_${Date.now()}.csv`;
+                a.click();
+                URL.revokeObjectURL(url);
+                this.updateStatus('CSVファイルをダウンロードしました ✓', 'success');
+            } catch (err) {
+                this.updateStatus('CSVダウンロードに失敗しました', 'error');
+            }
+        }
+
+        clearAll() {
+            if (confirm('すべてのマーカーを削除してもいいですか？')) {
+                this.markers = [];
+                this.mapMarkers.forEach(m => {
+                    if (this.map) this.map.removeLayer(m);
+                });
+                this.mapMarkers = [];
+                this.updateRecordsList();
+                this.updateTextOutput();
+                this.updateStatus('すべてのマーカーを削除しました', 'success');
+            }
+        }
+
+        sanitizeInput(input) {
+            const div = document.createElement('div');
+            div.textContent = input || '';
+            return div.innerHTML;
+        }
+
+        updateStatus(message, type) {
+            this.elements.status.textContent = message;
+            this.elements.status.className = `status ${type}`;
+        }
+    }
+
+    // アプリケーション初期化
+    let app;
+    window.addEventListener('load', () => {
+        app = new LocationMarker();
+    });
+</script></body>
+</html>
+
