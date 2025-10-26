@@ -63,6 +63,7 @@
         color: white;
         padding: 20px;
         text-align: center;
+        position: relative;
     }
 
     .header h1 {
@@ -194,11 +195,18 @@
         border-top: 2px solid #667eea;
     }
 
+    .records-title-bar {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+        margin-bottom: 0.5rem;
+    }
+
     .records-title {
         font-weight: 600;
         font-size: 0.875rem;
-        margin-bottom: 0.5rem;
         color: #333;
+        flex: 1;
     }
 
     .record-item {
@@ -209,11 +217,24 @@
         margin-bottom: 0.5rem;
         cursor: pointer;
         transition: all 0.2s;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
     }
 
     .record-item:hover {
         background-color: #f0f7ff;
         border-color: #667eea;
+    }
+
+    .record-left {
+        flex: 1;
+    }
+
+    .record-actions {
+        display: flex;
+        gap: 0.5rem;
+        margin-left: 0.5rem;
     }
 
     .record-name {
@@ -325,7 +346,47 @@
     .leaflet-popup-content {
         font-size: 0.875rem;
     }
-</style></head>
+
+    /* modal */
+    .modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.5);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 2000;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal {
+        background: white;
+        padding: 1rem;
+        border-radius: 8px;
+        width: 90%;
+        max-width: 480px;
+    }
+
+    .toast {
+        position: fixed;
+        left: 50%;
+        transform: translateX(-50%);
+        bottom: 20px;
+        background: rgba(0,0,0,0.8);
+        color: white;
+        padding: 0.6rem 1rem;
+        border-radius: 20px;
+        display: none;
+        z-index: 3000;
+    }
+    .toast.show { display: block; }
+
+    /* make buttons larger on mobile */
+    @media (max-width: 480px) {
+        button { padding: 1rem; font-size: 1rem; }
+        .header h1 { font-size: 1.25rem; }
+    }
+    </style>
+</head>
 <body>
     <div class="container">
         <!-- 左パネル -->
@@ -333,16 +394,17 @@
             <div class="header">
                 <h1> 位置マーカー</h1>
                 <p>位置をテキスト記録</p>
+                <button class="toggle-panel" id="toggleClose" style="display:none;">閉じる</button>
             </div>
             
         <div class="controls">
             <div class="status info" id="status">準備完了</div>
-            
+
             <div class="button-group">
-                <button class="btn-primary" id="getLocationBtn" onclick="app.getCurrentLocation()"> 現在地取得</button>
-                <button class="btn-success" onclick="app.markLocation()"> ここをマーク</button>
+                <button class="btn-primary" id="getLocationBtn" type="button"> 現在地取得</button>
+                <button class="btn-success" id="markHereBtn" type="button"> ここをマーク</button>
             </div>
-            
+
             <div class="current-location">
                 <div style="font-size: 0.75rem; color: #666; margin-bottom: 0.25rem;">現在位置:</div>
                 <div class="location-value">
@@ -350,33 +412,36 @@
                     経度: <span id="currentLng">-</span>
                 </div>
             </div>
-            
+
             <div class="input-group">
                 <label> マーク名（オプション）</label>
                 <input type="text" id="markerName" placeholder="例：駐車位置、友達の家">
             </div>
-            
+
             <div class="input-group">
                 <label> メモ（オプション）</label>
                 <textarea id="markerMemo" placeholder="例：3階南側、ステッカー付き"></textarea>
             </div>
-            
-            <button class="btn-primary" style="width: 100%;" onclick="app.addMarker()"> マーカーを追加</button>
-            
+
+            <button class="btn-primary" style="width: 100%;" id="addMarkerBtn"> マーカーを追加</button>
+
             <div class="text-output">
                 <div class="output-title"> テキスト出力</div>
                 <textarea class="output-text" id="textOutput" readonly placeholder="マーカーの情報がここに表示されます"></textarea>
                 <div class="export-buttons">
-                    <button class="btn-primary" onclick="app.copyText()"> コピー</button>
-                    <button class="btn-primary" onclick="app.downloadText()"> TXT</button>
-                    <button class="btn-primary" onclick="app.downloadCsv()"> CSV</button>
-                    <button class="btn-danger" onclick="app.clearAll()"> 削除</button>
+                    <button class="btn-primary" id="copyBtn"> コピー</button>
+                    <button class="btn-primary" id="txtBtn"> TXT</button>
+                    <button class="btn-primary" id="csvBtn"> CSV</button>
+                    <button class="btn-danger" id="clearBtn"> 削除</button>
                 </div>
             </div>
         </div>
         
         <div class="records-section">
-            <div class="records-title"> 記録済みマーカー</div>
+            <div class="records-title-bar">
+                <div class="records-title"> 記録済みマーカー</div>
+                <input type="text" id="searchInput" placeholder="検索（名前・メモ）" style="padding:0.4rem; border:1px solid #ddd; border-radius:6px; width:40%;">
+            </div>
             <div id="recordsList" class="empty-state">マーカーが登録されていません</div>
         </div>
     </div>
@@ -384,6 +449,29 @@
     <!-- 地図 -->
     <div id="map"></div>
 </div>
+
+<!-- edit modal -->
+<div class="modal-overlay" id="modalOverlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+        <h3 id="modalTitle">マーカー編集</h3>
+        <div class="input-group">
+            <label>マーク名</label>
+            <input type="text" id="editName">
+        </div>
+        <div class="input-group">
+            <label>メモ</label>
+            <textarea id="editMemo"></textarea>
+        </div>
+        <div style="display:flex; gap:0.5rem; justify-content:flex-end; margin-top:0.5rem;">
+            <button class="btn-primary" id="saveEditBtn">保存</button>
+            <button class="btn-danger" id="cancelEditBtn">キャンセル</button>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<button class="toggle-panel" id="toggleOpen" aria-label="メニューを開く" style="display:none;">☰</button>
 
 <script>
     class LocationMarker {
@@ -393,30 +481,93 @@
             this.currentLng = null;
             this.markers = [];
             this.mapMarkers = [];
-            
+            this.storageKey = 'locationMarkers_v1';
+
             this.elements = {
                 getLocationBtn: document.getElementById('getLocationBtn'),
+                markHereBtn: document.getElementById('markHereBtn'),
+                addMarkerBtn: document.getElementById('addMarkerBtn'),
                 markerName: document.getElementById('markerName'),
                 markerMemo: document.getElementById('markerMemo'),
                 textOutput: document.getElementById('textOutput'),
                 recordsList: document.getElementById('recordsList'),
                 status: document.getElementById('status'),
                 currentLat: document.getElementById('currentLat'),
-                currentLng: document.getElementById('currentLng')
+                currentLng: document.getElementById('currentLng'),
+                searchInput: document.getElementById('searchInput'),
+                copyBtn: document.getElementById('copyBtn'),
+                txtBtn: document.getElementById('txtBtn'),
+                csvBtn: document.getElementById('csvBtn'),
+                clearBtn: document.getElementById('clearBtn')
             };
-            
+
+            // modal
+            this.modalOverlay = document.getElementById('modalOverlay');
+            this.editName = document.getElementById('editName');
+            this.editMemo = document.getElementById('editMemo');
+            this.saveEditBtn = document.getElementById('saveEditBtn');
+            this.cancelEditBtn = document.getElementById('cancelEditBtn');
+            this.currentEditId = null;
+
+            // UI controls
+            this.toggleOpen = document.getElementById('toggleOpen');
+            this.toggleClose = document.getElementById('toggleClose');
+            this.leftPanel = document.getElementById('leftPanel');
+            this.toastEl = document.getElementById('toast');
+
             this.init();
         }
 
         init() {
             this.initMap();
+            this.loadMarkersFromStorage();
+            this.restoreMarkersToMap();
             this.updateStatus('準備完了', 'info');
+            this.bindEvents();
+            this.updateTextOutput();
+            this.handleResponsive();
+        }
+
+        bindEvents() {
+            this.elements.getLocationBtn.addEventListener('click', () => this.getCurrentLocation());
+            this.elements.markHereBtn.addEventListener('click', () => this.markLocation());
+            this.elements.addMarkerBtn.addEventListener('click', () => this.addMarker());
+            this.elements.searchInput.addEventListener('input', (e) => this.updateRecordsList());
+            this.elements.copyBtn.addEventListener('click', () => this.copyText());
+            this.elements.txtBtn.addEventListener('click', () => this.downloadText());
+            this.elements.csvBtn.addEventListener('click', () => this.downloadCsv());
+            this.elements.clearBtn.addEventListener('click', () => this.clearAll());
+
+            // modal
+            this.saveEditBtn.addEventListener('click', () => this.saveEdit());
+            this.cancelEditBtn.addEventListener('click', () => this.closeEditModal());
+            this.modalOverlay.addEventListener('click', (e) => {
+                if (e.target === this.modalOverlay) this.closeEditModal();
+            });
+
+            // mobile toggle
+            this.toggleOpen.addEventListener('click', () => { this.leftPanel.classList.add('active'); this.toggleOpen.style.display='none'; this.toggleClose.style.display='inline-block'; });
+            this.toggleClose.addEventListener('click', () => { this.leftPanel.classList.remove('active'); this.toggleOpen.style.display='inline-block'; this.toggleClose.style.display = 'none'; });
+
+            window.addEventListener('resize', () => this.handleResponsive());
+        }
+
+        handleResponsive() {
+            if (window.innerWidth <= 768) {
+                this.toggleOpen.style.display = 'inline-block';
+                this.toggleClose.style.display = 'none';
+                this.leftPanel.classList.remove('active');
+            } else {
+                this.toggleOpen.style.display = 'none';
+                this.toggleClose.style.display = 'none';
+                this.leftPanel.classList.remove('active');
+            }
         }
 
         initMap() {
             try {
                 this.map = L.map('map').setView([35.6762, 139.6503], 13);
-                
+
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                     attribution: '© OpenStreetMap contributors',
                     maxZoom: 19
@@ -430,7 +581,7 @@
         getCurrentLocation() {
             this.updateStatus('位置情報を取得中...', 'info');
             this.elements.getLocationBtn.disabled = true;
-            
+
             if (!navigator.geolocation) {
                 this.updateStatus('このブラウザは位置情報に対応していません', 'error');
                 this.elements.getLocationBtn.disabled = false;
@@ -441,15 +592,16 @@
                 (position) => {
                     this.currentLat = position.coords.latitude;
                     this.currentLng = position.coords.longitude;
-                    
+
                     this.elements.currentLat.textContent = this.currentLat.toFixed(6);
                     this.elements.currentLng.textContent = this.currentLng.toFixed(6);
-                    
+
                     if (this.map) {
                         this.map.setView([this.currentLat, this.currentLng], 16);
                     }
-                    
+
                     this.updateStatus('位置情報を取得しました ✓', 'success');
+                    this.showToast('現在地を取得しました');
                     this.elements.getLocationBtn.disabled = false;
                 },
                 (error) => {
@@ -466,6 +618,7 @@
                             break;
                     }
                     this.updateStatus(message, 'error');
+                    this.showToast(message, 'error');
                     this.elements.getLocationBtn.disabled = false;
                 },
                 { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
@@ -473,23 +626,31 @@
         }
 
         markLocation() {
-            this.elements.markerName.value = '';
-            this.elements.markerMemo.value = '';
+            // keep input values; just add marker at current location
+            if (this.currentLat === null || this.currentLng === null) {
+                this.updateStatus('先に現在地を取得してください', 'error');
+                this.showToast('先に現在地を取得してください', 'error');
+                return;
+            }
             this.addMarker();
         }
 
         addMarker() {
             if (this.currentLat === null || this.currentLng === null) {
                 this.updateStatus('先に現在地を取得してください', 'error');
+                this.showToast('先に現在地を取得してください', 'error');
                 return;
             }
 
-            const name = this.sanitizeInput(this.elements.markerName.value) || `マーカー${this.markers.length + 1}`;
-            const memo = this.sanitizeInput(this.elements.markerMemo.value);
+            const rawName = (this.elements.markerName.value || '').trim();
+            const rawMemo = (this.elements.markerMemo.value || '').trim();
+
+            const name = this.sanitizeInput(rawName) || `マーカー${this.markers.length + 1}`;
+            const memo = this.sanitizeInput(rawMemo);
             const timestamp = new Date().toLocaleString('ja-JP');
 
             const marker = {
-                id: Date.now(),
+                id: Date.now() + Math.floor(Math.random() * 1000),
                 name: name,
                 lat: this.currentLat,
                 lng: this.currentLng,
@@ -498,30 +659,39 @@
             };
 
             this.markers.push(marker);
-            
-            if (this.map) {
-                const mapMarker = L.marker([marker.lat, marker.lng], { draggable: true })
-                    .addTo(this.map)
-                    .bindPopup(`<b>${marker.name}</b><br/>${marker.lat.toFixed(6)}, ${marker.lng.toFixed(6)}<br/>${marker.memo || ''}`)
-                    .on('click', () => this.map.setView([marker.lat, marker.lng], 16))
-                    .on('dragend', (e) => {
-                        const newPos = e.target.getLatLng();
-                        marker.lat = newPos.lat;
-                        marker.lng = newPos.lng;
-                        this.updateRecordsList();
-                        this.updateTextOutput();
-                    });
-                this.mapMarkers.push(mapMarker);
-            }
-
-            this.elements.markerName.value = '';
-            this.elements.markerMemo.value = '';
+            this.addMapMarker(marker);
+            this.saveMarkersToStorage();
             this.updateRecordsList();
             this.updateTextOutput();
             this.updateStatus('マーカーを追加しました ✓', 'success');
+            this.showToast('マーカーを追加しました');
+        }
+
+        addMapMarker(marker) {
+            if (!this.map) return;
+            const popupContent = `<b>${marker.name}</b><br/>${marker.lat.toFixed(6)}, ${marker.lng.toFixed(6)}<br/>${marker.memo || ''}<br/><small>${marker.timestamp}</small>`;
+            const mapMarker = L.marker([marker.lat, marker.lng], { draggable: true })
+                .addTo(this.map)
+                .bindPopup(popupContent)
+                .on('click', () => this.map.setView([marker.lat, marker.lng], 16))
+                .on('dragend', (e) => {
+                    const newPos = e.target.getLatLng();
+                    // find corresponding marker by matching id via index
+                    const idx = this.mapMarkers.indexOf(mapMarker);
+                    if (idx !== -1 && this.markers[idx]) {
+                        this.markers[idx].lat = newPos.lat;
+                        this.markers[idx].lng = newPos.lng;
+                        mapMarker.setPopupContent(`<b>${this.markers[idx].name}</b><br/>${newPos.lat.toFixed(6)}, ${newPos.lng.toFixed(6)}<br/>${this.markers[idx].memo || ''}<br/><small>${this.markers[idx].timestamp}</small>`);                        this.saveMarkersToStorage();
+                        this.updateRecordsList();
+                        this.updateTextOutput();
+                    }
+                });
+
+            this.mapMarkers.push(mapMarker);
         }
 
         deleteMarker(id) {
+            if (!confirm('このマーカーを削除してよいですか？')) return;
             const index = this.markers.findIndex(m => m.id === id);
             if (index !== -1) {
                 if (this.map && this.mapMarkers[index]) {
@@ -529,17 +699,35 @@
                 }
                 this.markers.splice(index, 1);
                 this.mapMarkers.splice(index, 1);
+                this.saveMarkersToStorage();
                 this.updateRecordsList();
                 this.updateTextOutput();
                 this.updateStatus('マーカーを削除しました', 'success');
+                this.showToast('マーカーを削除しました');
             }
         }
 
         updateRecordsList() {
             const list = this.elements.recordsList;
+            const q = (this.elements.searchInput.value || '').trim().toLowerCase();
             list.innerHTML = '';
-            
-            if (this.markers.length === 0) {
+
+            const filtered = this.markers.map((m, idx) => ({m, idx})).filter(({m}) => {
+                if (!q) return true;
+                return (m.name && m.name.toLowerCase().includes(q)) || (m.memo && m.memo.toLowerCase().includes(q));
+            });
+
+            // show/hide map markers according to filter
+            this.mapMarkers.forEach((mm, i) => {
+                const visible = filtered.some(f => f.idx === i);
+                if (visible) {
+                    if (!this.map.hasLayer(mm)) this.map.addLayer(mm);
+                } else {
+                    if (this.map.hasLayer(mm)) this.map.removeLayer(mm);
+                }
+            });
+
+            if (filtered.length === 0) {
                 const empty = document.createElement('div');
                 empty.className = 'empty-state';
                 empty.textContent = 'マーカーが登録されていません';
@@ -547,34 +735,52 @@
                 return;
             }
 
-            this.markers.forEach((m) => {
+            filtered.forEach(({m, idx}) => {
                 const item = document.createElement('div');
                 item.className = 'record-item';
-                
-                let html = `
+                item.tabIndex = 0;
+
+                const left = document.createElement('div');
+                left.className = 'record-left';
+                left.innerHTML = `
                     <div class="record-name"> ${m.name}</div>
                     <div class="record-coords">${m.lat.toFixed(6)}, ${m.lng.toFixed(6)}</div>
                     <div class="record-time">${m.timestamp}</div>
-                `;
-                
-                if (m.memo) {
-                    html += `<div class="record-memo"> ${m.memo}</div>`;
-                }
-                
-                html += `<div class="record-delete" role="button" tabindex="0">削除</div>`;
-                
-                item.innerHTML = html;
-                
-                const deleteBtn = item.querySelector('.record-delete');
-                deleteBtn.addEventListener('click', () => this.deleteMarker(m.id));
-                deleteBtn.addEventListener('keypress', (e) => {
-                    if (e.key === 'Enter') this.deleteMarker(m.id);
-                });
-                
+                    ${m.memo ? `<div class="record-memo"> ${m.memo}</div>` : ''}`;
+
+                const actions = document.createElement('div');
+                actions.className = 'record-actions';
+                const editBtn = document.createElement('button');
+                editBtn.className = 'btn-primary';
+                editBtn.textContent = '編集';
+                editBtn.title = '編集';
+                editBtn.addEventListener('click', (e) => { e.stopPropagation(); this.openEditModal(m.id); });
+
+                const delBtn = document.createElement('button');
+                delBtn.className = 'btn-danger';
+                delBtn.textContent = '削除';
+                delBtn.title = '削除';
+                delBtn.addEventListener('click', (e) => { e.stopPropagation(); this.deleteMarker(m.id); });
+
+                actions.appendChild(editBtn);
+                actions.appendChild(delBtn);
+
+                item.appendChild(left);
+                item.appendChild(actions);
+
                 item.addEventListener('click', () => {
-                    if (this.map) this.map.setView([m.lat, m.lng], 16);
+                    if (this.map) {
+                        this.map.setView([m.lat, m.lng], 16);
+                        // open popup for the corresponding map marker
+                        const mapIdx = idx;
+                        if (this.mapMarkers[mapIdx]) this.mapMarkers[mapIdx].openPopup();
+                    }
                 });
-                
+
+                item.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') item.click();
+                });
+
                 list.appendChild(item);
             });
         }
@@ -598,13 +804,22 @@
             this.elements.textOutput.value = text;
         }
 
-        copyText() {
+        async copyText() {
             try {
-                this.elements.textOutput.select();
-                document.execCommand('copy');
+                const text = this.elements.textOutput.value;
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    await navigator.clipboard.writeText(text);
+                } else {
+                    this.elements.textOutput.select();
+                    document.execCommand('copy');
+                    window.getSelection().removeAllRanges();
+                }
                 this.updateStatus('テキストをコピーしました ✓', 'success');
+                this.showToast('コピーしました');
             } catch (err) {
+                console.error('copy error', err);
                 this.updateStatus('コピーに失敗しました', 'error');
+                this.showToast('コピーに失敗しました', 'error');
             }
         }
 
@@ -616,25 +831,34 @@
                 const a = document.createElement('a');
                 a.href = url;
                 a.download = `location_markers_${Date.now()}.txt`;
+                document.body.appendChild(a);
                 a.click();
+                a.remove();
                 URL.revokeObjectURL(url);
                 this.updateStatus('テキストファイルをダウンロードしました ✓', 'success');
+                this.showToast('テキストをダウンロードしました');
             } catch (err) {
+                console.error('download text error', err);
                 this.updateStatus('ダウンロードに失敗しました', 'error');
+                this.showToast('ダウンロードに失敗しました', 'error');
             }
         }
 
         downloadCsv() {
             try {
                 let csv = 'ID,Name,Latitude,Longitude,Timestamp,Memo\n';
+                const escape = (s) => {
+                    if (s == null) return '""';
+                    return `"${String(s).replace(/"/g, '""')}"`;
+                };
                 this.markers.forEach((m) => {
                     const row = [
                         m.id,
-                        `"${m.name.replace(/"/g, '""')}"`,
+                        escape(m.name),
                         m.lat.toFixed(6),
                         m.lng.toFixed(6),
-                        `"${m.timestamp}"`,
-                        `"${(m.memo || '').replace(/"/g, '')}"`
+                        escape(m.timestamp),
+                        escape(m.memo || '')
                     ].join(',');
                     csv += `${row}\n`;
                 });
@@ -644,11 +868,16 @@
                 const a = document.createElement('a');
                 a.href = url;
                 a.download = `location_markers_${Date.now()}.csv`;
+                document.body.appendChild(a);
                 a.click();
+                a.remove();
                 URL.revokeObjectURL(url);
                 this.updateStatus('CSVファイルをダウンロードしました ✓', 'success');
+                this.showToast('CSVをダウンロードしました');
             } catch (err) {
+                console.error('download csv error', err);
                 this.updateStatus('CSVダウンロードに失敗しました', 'error');
+                this.showToast('CSVダウンロードに失敗しました', 'error');
             }
         }
 
@@ -659,10 +888,46 @@
                     if (this.map) this.map.removeLayer(m);
                 });
                 this.mapMarkers = [];
+                this.saveMarkersToStorage();
                 this.updateRecordsList();
                 this.updateTextOutput();
                 this.updateStatus('すべてのマーカーを削除しました', 'success');
+                this.showToast('すべてのマーカーを削除しました');
             }
+        }
+
+        openEditModal(id) {
+            const marker = this.markers.find(m => m.id === id);
+            if (!marker) return;
+            this.currentEditId = id;
+            this.editName.value = marker.name || '';
+            this.editMemo.value = marker.memo || '';
+            this.modalOverlay.classList.add('active');
+            this.modalOverlay.setAttribute('aria-hidden', 'false');
+        }
+
+        closeEditModal() {
+            this.currentEditId = null;
+            this.modalOverlay.classList.remove('active');
+            this.modalOverlay.setAttribute('aria-hidden', 'true');
+        }
+
+        saveEdit() {
+            if (this.currentEditId == null) return;
+            const idx = this.markers.findIndex(m => m.id === this.currentEditId);
+            if (idx === -1) return;
+            this.markers[idx].name = this.sanitizeInput(this.editName.value.trim()) || this.markers[idx].name;
+            this.markers[idx].memo = this.sanitizeInput(this.editMemo.value.trim());
+            // update popup content
+            if (this.mapMarkers[idx]) {
+                const m = this.markers[idx];
+                this.mapMarkers[idx].setPopupContent(`<b>${m.name}</b><br/>${m.lat.toFixed(6)}, ${m.lng.toFixed(6)}<br/>${m.memo || ''}<br/><small>${m.timestamp}</small>`);
+            }
+            this.saveMarkersToStorage();
+            this.updateRecordsList();
+            this.updateTextOutput();
+            this.closeEditModal();
+            this.showToast('マーカーを更新しました');
         }
 
         sanitizeInput(input) {
@@ -675,6 +940,55 @@
             this.elements.status.textContent = message;
             this.elements.status.className = `status ${type}`;
         }
+
+        showToast(message, type = 'info') {
+            this.toastEl.textContent = message;
+            this.toastEl.className = 'toast show';
+            if (type === 'error') this.toastEl.style.background = 'crimson';
+            else this.toastEl.style.background = 'rgba(0,0,0,0.8)';
+            clearTimeout(this._toastTimeout);
+            this._toastTimeout = setTimeout(() => {
+                this.toastEl.className = 'toast';
+            }, 2500);
+        }
+
+        saveMarkersToStorage() {
+            try {
+                const payload = JSON.stringify(this.markers);
+                localStorage.setItem(this.storageKey, payload);
+            } catch (err) {
+                console.error('save storage error', err);
+            }
+        }
+
+        loadMarkersFromStorage() {
+            try {
+                const raw = localStorage.getItem(this.storageKey);
+                if (!raw) return;
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) {
+                    this.markers = parsed;
+                }
+            } catch (err) {
+                console.error('load storage error', err);
+            }
+        }
+
+        restoreMarkersToMap() {
+            // Clear any existing map markers (safety)
+            if (this.mapMarkers.length) {
+                this.mapMarkers.forEach(m => {
+                    if (this.map) this.map.removeLayer(m);
+                });
+                this.mapMarkers = [];
+            }
+            // Add markers to the map from this.markers
+            this.markers.forEach((m) => {
+                this.addMapMarker(m);
+            });
+            this.updateRecordsList();
+            this.updateTextOutput();
+        }
     }
 
     // アプリケーション初期化
@@ -684,4 +998,3 @@
     });
 </script></body>
 </html>
-
